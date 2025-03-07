@@ -39,48 +39,42 @@ async def init_db():
                 await db.commit()
                 logger.info("База данных инициализирована: добавлены гардеробы от 1 до 500.")
 
-# Функция для генерации изображения с номерком
+# Функция для генерации изображения с номерком и нижней надписью
 def generate_ticket_image(number: int) -> io.BytesIO:
-    # Размер изображения (ширина x высота)
-    width, height = 600, 300
-    # Чёрный фон
+    width, height = 600, 300  # размеры изображения
     img = Image.new('RGB', (width, height), color='black')
     draw = ImageDraw.Draw(img)
     
-    # Неоново-розовый цвет
-    neon_pink = "#FF6EC7"
-    
-    # Попытка загрузить шрифт TrueType для номера
+    neon_pink = "#FF6EC7"  # Неоново-розовый цвет
+
+    # Загружаем шрифт для номера (Arial, 150px)
     try:
         number_font = ImageFont.truetype("arial.ttf", 150)
     except IOError:
         number_font = ImageFont.load_default()
     
     text = str(number)
-    # Вычисляем размеры текста для центрирования номера
     text_width, text_height = draw.textsize(text, font=number_font)
     text_x = (width - text_width) / 2
-    text_y = (height - text_height) / 2 - 20  # смещаем немного вверх для места под надпись
-    
-    # Рисуем эффект "неонового свечения" через обводку (несколько копий текста белым вокруг основного)
+    text_y = (height - text_height) / 2 - 20  # смещаем немного вверх
+
+    # Рисуем эффект неонового свечения (обводка белым)
     outline_range = 2
     for dx in range(-outline_range, outline_range + 1):
         for dy in range(-outline_range, outline_range + 1):
             if dx != 0 or dy != 0:
                 draw.text((text_x + dx, text_y + dy), text, font=number_font, fill="white")
-    # Основной текст неоново-розового цвета
     draw.text((text_x, text_y), text, font=number_font, fill=neon_pink)
     
     # Добавляем нижнюю надпись "ZT_PARTY X DOPAMINE" курсивом
     caption = "ZT_PARTY X DOPAMINE"
     try:
-        # Попытка загрузить курсивный шрифт (ariali.ttf — если доступен)
         caption_font = ImageFont.truetype("ariali.ttf", 30)
     except IOError:
         caption_font = ImageFont.load_default()
     cap_width, cap_height = draw.textsize(caption, font=caption_font)
     cap_x = (width - cap_width) / 2
-    cap_y = height - cap_height - 10  # отступ снизу 10 пикселей
+    cap_y = height - cap_height - 10  # отступ снизу
     draw.text((cap_x, cap_y), caption, font=caption_font, fill=neon_pink)
     
     bio = io.BytesIO()
@@ -112,9 +106,7 @@ async def show_buttons(update: Update, user_id: int, delete_prev_msg=False) -> N
 # Команда /start
 async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
-    await update.message.reply_text(
-        "Добро пожаловать в бота гардеробщика, здесь вы можете получить электронный номерок"
-    )
+    await update.message.reply_text("Добро пожаловать в бота гардеробщика, здесь вы можете получить электронный номерок")
     await show_buttons(update, user_id)
 
 # Команда для получения номерка с отправкой изображения
@@ -136,11 +128,8 @@ async def get_hanger(update: Update, context: CallbackContext) -> None:
             await db.execute("UPDATE hangers SET status = 'taken' WHERE id = ?", (hanger_id,))
             await db.execute("INSERT INTO users (user_id, hanger_id) VALUES (?, ?)", (user_id, hanger_id))
             await db.commit()
-            # Генерируем изображение с номерком
             image = generate_ticket_image(hanger_id)
-            await update.callback_query.message.reply_photo(
-                photo=image, caption=f"Ваш номерок № {hanger_id}"
-            )
+            await update.callback_query.message.reply_photo(photo=image, caption=f"Ваш номерок № {hanger_id}")
             await show_buttons(update, user_id, delete_prev_msg=True)
         else:
             await update.callback_query.message.reply_text("К сожалению, все номерки заняты.")
@@ -175,38 +164,33 @@ async def button_handler(update: Update, context: CallbackContext) -> None:
 async def error_handler(update: object, context: CallbackContext) -> None:
     logger.error("Исключение при обработке обновления:", exc_info=context.error)
 
-# Основная функция запуска
 def main():
     BOT_TOKEN = os.getenv("BOT_TOKEN")
+    WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+    PORT = int(os.getenv("PORT", "8443"))
+    
     if not BOT_TOKEN:
         logger.error("Переменная окружения BOT_TOKEN не установлена!")
         return
+    if not WEBHOOK_URL:
+        logger.error("Переменная окружения WEBHOOK_URL не установлена!")
+        return
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(init_db())
+    # Инициализация базы данных
+    asyncio.run(init_db())
 
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_error_handler(error_handler)
 
-    WEBHOOK_MODE = os.getenv("WEBHOOK_MODE", "false").lower() == "true"
-    if WEBHOOK_MODE:
-        PORT = int(os.getenv("PORT", "8443"))
-        WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-        if not WEBHOOK_URL:
-            logger.error("Для webhook режима необходимо установить переменную WEBHOOK_URL!")
-            return
-        logger.info("Запуск бота в режиме webhook...")
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=BOT_TOKEN,
-            webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}"
-        )
-    else:
-        logger.info("Запуск бота в режиме polling...")
-        application.run_polling()
+    logger.info("Запуск бота в режиме webhook...")
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=BOT_TOKEN,
+        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}"
+    )
 
 if __name__ == '__main__':
     main()
