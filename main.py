@@ -54,7 +54,11 @@ def generate_ticket_image(number: int) -> io.BytesIO:
         number_font = ImageFont.load_default()
     
     text = str(number)
-    text_width, text_height = draw.textsize(text, font=number_font)
+    # Вычисляем размеры текста с помощью textbbox
+    bbox = draw.textbbox((0, 0), text, font=number_font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    
     text_x = (width - text_width) / 2
     text_y = (height - text_height) / 2 - 20  # Сдвиг немного вверх для места под надпись
 
@@ -64,7 +68,6 @@ def generate_ticket_image(number: int) -> io.BytesIO:
         for dy in range(-outline_range, outline_range + 1):
             if dx != 0 or dy != 0:
                 draw.text((text_x + dx, text_y + dy), text, font=number_font, fill="white")
-    # Основной текст
     draw.text((text_x, text_y), text, font=number_font, fill=neon_pink)
     
     # Добавляем нижнюю надпись "ZT_PARTY X DOPAMINE" курсивом
@@ -73,7 +76,9 @@ def generate_ticket_image(number: int) -> io.BytesIO:
         caption_font = ImageFont.truetype("ariali.ttf", 30)
     except IOError:
         caption_font = ImageFont.load_default()
-    cap_width, cap_height = draw.textsize(caption, font=caption_font)
+    caption_bbox = draw.textbbox((0, 0), caption, font=caption_font)
+    cap_width = caption_bbox[2] - caption_bbox[0]
+    cap_height = caption_bbox[3] - caption_bbox[1]
     cap_x = (width - cap_width) / 2
     cap_y = height - cap_height - 10  # Отступ снизу 10 пикселей
     draw.text((cap_x, cap_y), caption, font=caption_font, fill=neon_pink)
@@ -104,7 +109,7 @@ async def show_buttons(update: Update, user_id: int, delete_prev_msg=False) -> N
     elif update.callback_query:
         await update.callback_query.message.reply_text("Выберите действие:", reply_markup=reply_markup)
 
-# Команда /start
+# Обработка команды /start
 async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     await update.message.reply_text("Добро пожаловать в бота гардеробщика, здесь вы можете получить электронный номерок")
