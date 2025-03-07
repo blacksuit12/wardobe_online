@@ -54,7 +54,7 @@ def generate_ticket_image(number: int) -> io.BytesIO:
         number_font = ImageFont.load_default()
     
     text = str(number)
-    # Вычисляем размеры текста с помощью textbbox
+    # Используем textbbox для вычисления ширины и высоты текста
     bbox = draw.textbbox((0, 0), text, font=number_font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
@@ -187,8 +187,11 @@ def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_error_handler(error_handler)
 
+    # Перед запуском polling удаляем вебхук (если он установлен)
+    loop.run_until_complete(application.bot.delete_webhook(drop_pending_updates=True))
+
     logger.info("Запуск бота в режиме polling...")
-    application.run_polling()
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()
