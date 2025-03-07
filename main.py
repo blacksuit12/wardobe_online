@@ -64,6 +64,7 @@ def generate_ticket_image(number: int) -> io.BytesIO:
         for dy in range(-outline_range, outline_range + 1):
             if dx != 0 or dy != 0:
                 draw.text((text_x + dx, text_y + dy), text, font=number_font, fill="white")
+    # Основной текст
     draw.text((text_x, text_y), text, font=number_font, fill=neon_pink)
     
     # Добавляем нижнюю надпись "ZT_PARTY X DOPAMINE" курсивом
@@ -74,7 +75,7 @@ def generate_ticket_image(number: int) -> io.BytesIO:
         caption_font = ImageFont.load_default()
     cap_width, cap_height = draw.textsize(caption, font=caption_font)
     cap_x = (width - cap_width) / 2
-    cap_y = height - cap_height - 10  # Отступ снизу
+    cap_y = height - cap_height - 10  # Отступ снизу 10 пикселей
     draw.text((cap_x, cap_y), caption, font=caption_font, fill=neon_pink)
     
     bio = io.BytesIO()
@@ -171,8 +172,10 @@ def main():
         logger.error("Переменная окружения BOT_TOKEN не установлена!")
         return
 
-    # Инициализация базы данных
-    asyncio.run(init_db())
+    # Создаем новый event loop и устанавливаем его как текущий
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(init_db())
 
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
