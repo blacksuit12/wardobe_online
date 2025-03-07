@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = "cloakroom.db"
 
-# Инициализация базы данных: номера расширены до 500
+# Асинхронная инициализация базы данных: номера от 1 до 500
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
@@ -41,7 +41,7 @@ async def init_db():
 
 # Функция для генерации изображения с номерком и нижней надписью
 def generate_ticket_image(number: int) -> io.BytesIO:
-    width, height = 600, 300  # размеры изображения
+    width, height = 600, 300  # Размеры изображения
     img = Image.new('RGB', (width, height), color='black')
     draw = ImageDraw.Draw(img)
     
@@ -56,7 +56,7 @@ def generate_ticket_image(number: int) -> io.BytesIO:
     text = str(number)
     text_width, text_height = draw.textsize(text, font=number_font)
     text_x = (width - text_width) / 2
-    text_y = (height - text_height) / 2 - 20  # смещаем немного вверх
+    text_y = (height - text_height) / 2 - 20  # Сдвиг немного вверх для места под надпись
 
     # Рисуем эффект неонового свечения (обводка белым)
     outline_range = 2
@@ -74,7 +74,7 @@ def generate_ticket_image(number: int) -> io.BytesIO:
         caption_font = ImageFont.load_default()
     cap_width, cap_height = draw.textsize(caption, font=caption_font)
     cap_x = (width - cap_width) / 2
-    cap_y = height - cap_height - 10  # отступ снизу
+    cap_y = height - cap_height - 10  # Отступ снизу
     draw.text((cap_x, cap_y), caption, font=caption_font, fill=neon_pink)
     
     bio = io.BytesIO()
@@ -82,7 +82,7 @@ def generate_ticket_image(number: int) -> io.BytesIO:
     bio.seek(0)
     return bio
 
-# Функция отображения кнопок
+# Функция для отображения кнопок (Взять/Сдать номерок)
 async def show_buttons(update: Update, user_id: int, delete_prev_msg=False) -> None:
     keyboard = [[InlineKeyboardButton("Взять номерок", callback_data='get_hanger')]]
     async with aiosqlite.connect(DB_PATH) as db:
@@ -109,7 +109,7 @@ async def start(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text("Добро пожаловать в бота гардеробщика, здесь вы можете получить электронный номерок")
     await show_buttons(update, user_id)
 
-# Команда для получения номерка с отправкой изображения
+# Обработка получения номерка
 async def get_hanger(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.from_user.id
     async with aiosqlite.connect(DB_PATH) as db:
@@ -129,12 +129,14 @@ async def get_hanger(update: Update, context: CallbackContext) -> None:
             await db.execute("INSERT INTO users (user_id, hanger_id) VALUES (?, ?)", (user_id, hanger_id))
             await db.commit()
             image = generate_ticket_image(hanger_id)
-            await update.callback_query.message.reply_photo(photo=image, caption=f"Ваш номерок № {hanger_id}")
+            await update.callback_query.message.reply_photo(
+                photo=image, caption=f"Ваш номерок № {hanger_id}"
+            )
             await show_buttons(update, user_id, delete_prev_msg=True)
         else:
             await update.callback_query.message.reply_text("К сожалению, все номерки заняты.")
 
-# Команда для освобождения номерка
+# Обработка сдачи номерка
 async def free_hanger(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.from_user.id
     async with aiosqlite.connect(DB_PATH) as db:
@@ -150,30 +152,23 @@ async def free_hanger(update: Update, context: CallbackContext) -> None:
         await update.callback_query.message.reply_text("Вы успешно сдали номерок!")
         await show_buttons(update, user_id, delete_prev_msg=True)
 
-# Обработка нажатия кнопок
+# Обработка нажатий кнопок
 async def button_handler(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    action = query.data
+    action = update.callback_query.data
     if action == 'get_hanger':
         await get_hanger(update, context)
     elif action == 'free_hanger':
         await free_hanger(update, context)
-    await query.answer()
+    await update.callback_query.answer()
 
 # Глобальный обработчик ошибок
 async def error_handler(update: object, context: CallbackContext) -> None:
-    logger.error("Исключение при обработке обновления:", exc_info=context.error)
+    logger.error("Ошибка при обработке обновления", exc_info=context.error)
 
 def main():
     BOT_TOKEN = os.getenv("BOT_TOKEN")
-    WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-    PORT = int(os.getenv("PORT", "8443"))
-    
     if not BOT_TOKEN:
         logger.error("Переменная окружения BOT_TOKEN не установлена!")
-        return
-    if not WEBHOOK_URL:
-        logger.error("Переменная окружения WEBHOOK_URL не установлена!")
         return
 
     # Инициализация базы данных
@@ -184,13 +179,8 @@ def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_error_handler(error_handler)
 
-    logger.info("Запуск бота в режиме webhook...")
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=BOT_TOKEN,
-        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}"
-    )
+    logger.info("Запуск бота в режиме polling...")
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
