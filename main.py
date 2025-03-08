@@ -5,7 +5,7 @@ import aiosqlite
 import io
 import time
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, CallbackContext
 
@@ -40,52 +40,81 @@ async def init_db():
                 await db.commit()
                 logger.info("База данных инициализирована: добавлены гардеробы от 1 до 500.")
 
-# Функция для генерации изображения с номерком и нижней надписью
+# Функция для генерации изображения с номерком и надписями
 def generate_ticket_image(number: int) -> io.BytesIO:
-    width, height = 600, 300  # Размеры изображения
-    img = Image.new('RGB', (width, height), color='black')
-    draw = ImageDraw.Draw(img)
-    
+    width, height = 600, 300
+
+    # Создаем тёмный фон
+    background = Image.new('RGB', (width, height), (20, 20, 20))
+    # Генерируем шумовую текстуру (легкая текстура)
+    try:
+        noise = Image.effect_noise((width, height), 100).convert('RGB')
+        # Смешиваем фон и шум (10% шума)
+        bg = Image.blend(background, noise, 0.1)
+    except Exception as e:
+        logger.error(f"Ошибка при создании текстурированного фона: {e}")
+        bg = background
+
+    draw = ImageDraw.Draw(bg)
+
     neon_pink = "#FF6EC7"  # Неоново-розовый цвет
 
-    # Загружаем шрифт для номера (Arial, 150px)
+    # Определяем шрифты (попробуем разные размеры)
     try:
-        number_font = ImageFont.truetype("arial.ttf", 150)
+        top_font = ImageFont.truetype("arial.ttf", 40)  # для "Ваш Номерок"
+    except IOError:
+        top_font = ImageFont.load_default()
+    try:
+        number_font = ImageFont.truetype("arial.ttf", 180)  # для номера
     except IOError:
         number_font = ImageFont.load_default()
-    
-    text = str(number)
-    # Вычисляем размеры текста с помощью textbbox
-    bbox = draw.textbbox((0, 0), text, font=number_font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    
-    text_x = (width - text_width) / 2
-    text_y = (height - text_height) / 2 - 20  # Сдвиг немного вверх для места под надпись
-
-    # Рисуем эффект неонового свечения (обводка белым)
-    outline_range = 2
-    for dx in range(-outline_range, outline_range + 1):
-        for dy in range(-outline_range, outline_range + 1):
-            if dx != 0 or dy != 0:
-                draw.text((text_x + dx, text_y + dy), text, font=number_font, fill="white")
-    draw.text((text_x, text_y), text, font=number_font, fill=neon_pink)
-    
-    # Добавляем нижнюю надпись "ZT_PARTY X DOPAMINE" курсивом
-    caption = "ZT_PARTY X DOPAMINE"
     try:
-        caption_font = ImageFont.truetype("ariali.ttf", 30)
+        caption_font = ImageFont.truetype("ariali.ttf", 40)  # для нижней надписи
     except IOError:
         caption_font = ImageFont.load_default()
-    caption_bbox = draw.textbbox((0, 0), caption, font=caption_font)
-    cap_width = caption_bbox[2] - caption_bbox[0]
-    cap_height = caption_bbox[3] - caption_bbox[1]
-    cap_x = (width - cap_width) / 2
-    cap_y = height - cap_height - 10  # Отступ снизу 10 пикселей
-    draw.text((cap_x, cap_y), caption, font=caption_font, fill=neon_pink)
-    
+
+    # Функция для рисования текста с эффектом неонового свечения (обводка)
+    def draw_neon_text(text, font, position):
+        x, y = position
+        outline_range = 3
+        for dx in range(-outline_range, outline_range + 1):
+            for dy in range(-outline_range, outline_range + 1):
+                if dx != 0 or dy != 0:
+                    draw.text((x + dx, y + dy), text, font=font, fill="white")
+        draw.text(position, text, font=font, fill=neon_pink)
+
+    # Верхняя надпись "Ваш Номерок"
+    top_text = "Ваш Номерок"
+    top_bbox = draw.textbbox((0, 0), top_text, font=top_font)
+    top_text_width = top_bbox[2] - top_bbox[0]
+    top_text_height = top_bbox[3] - top_bbox[1]
+    top_x = (width - top_text_width) / 2
+    top_y = 10  # небольшой отступ сверху
+    draw_neon_text(top_text, top_font, (top_x, top_y))
+
+    # Центральный номер
+    num_text = str(number)
+    num_bbox = draw.textbbox((0, 0), num_text, font=number_font)
+    num_text_width = num_bbox[2] - num_bbox[0]
+    num_text_height = num_bbox[3] - num_bbox[1]
+    num_x = (width - num_text_width) / 2
+    num_y = (height - num_text_height) / 2
+    draw_neon_text(num_text, number_font, (num_x, num_y))
+
+    # Нижняя надпись "ZT_PARTY X DOPAMINE"
+    caption_text = "ZT_PARTY X DOPAMINE"
+    cap_bbox = draw.textbbox((0, 0), caption_text, font=caption_font)
+    cap_text_width = cap_bbox[2] - cap_bbox[0]
+    cap_text_height = cap_bbox[3] - cap_bbox[1]
+    cap_x = (width - cap_text_width) / 2
+    cap_y = height - cap_text_height - 10
+    draw_neon_text(caption_text, caption_font, (cap_x, cap_y))
+
+    # Можно добавить дополнительное размытие для эффекта свечения (опционально)
+    # bg = bg.filter(ImageFilter.GaussianBlur(1))
+
     bio = io.BytesIO()
-    img.save(bio, format="PNG")
+    bg.save(bio, format="PNG")
     bio.seek(0)
     return bio
 
