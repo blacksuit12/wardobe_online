@@ -58,7 +58,7 @@ def generate_ticket_image(number: int) -> io.BytesIO:
             bg = background
 
     draw = ImageDraw.Draw(bg)
-    neon_pink = "#FF6EC7"  # Неоново-розовый цвет
+    neon_pink = "#FF7F94"  # Неоново-розовый цвет
 
     # Определяем шрифт для номера – размер   pt
     try:
