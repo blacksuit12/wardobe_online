@@ -60,9 +60,9 @@ def generate_ticket_image(number: int) -> io.BytesIO:
     draw = ImageDraw.Draw(bg)
     neon_pink = "#FF6EC7"  # Неоново-розовый цвет
 
-    # Определяем шрифт для номера – размер 150 pt
+    # Определяем шрифт для номера – размер   pt
     try:
-        number_font = ImageFont.truetype("arial.ttf", 150)
+        number_font = ImageFont.truetype("Medium.otf", 150)
     except IOError:
         number_font = ImageFont.load_default()
 
